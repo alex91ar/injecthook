@@ -1,0 +1,9 @@
+# depslib dependency file v1.0
+1522798735 source:d:\para grabar\proyectos c++\steam\hook\injector\main.cpp
+	<iostream>
+	<string>
+	<windows.h>
+	<sstream>
+	<psapi.h>
+	<algorithm>
+
