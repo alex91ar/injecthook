@@ -19,7 +19,9 @@ int main(int argc, char **argv)
     HANDLE hDLL = CreateFile(argv[2], 0, 0, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
     if(hDLL == INVALID_HANDLE_VALUE) errorAndOut(GetLastError(), "CreateFile opening dll");
     CloseHandle(hDLL);
+
     stringstream pidOrName(argv[1]);
+
     DWORD dwPID = 0;
     pidOrName >> dwPID;
     if(!dwPID) dwPID = findProcess(argv[1]);
@@ -27,6 +29,7 @@ int main(int argc, char **argv)
     cout << "Injecting on " << dwPID << "..." << endl;
     HANDLE hProcess = OpenProcess(PROCESS_CREATE_THREAD | PROCESS_QUERY_INFORMATION | PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_VM_READ, false, dwPID);
     if(hProcess == nullptr) errorAndOut(GetLastError(), "OpenProcess");
+
     cout << "Process " << dwPID << " opened." << endl;
     if(!checkArch(hProcess)) errorAndOut(0, "Incompatible architecture. Compile the proper version and try again.");
     cout << "Allocating memory..." << endl;
@@ -42,6 +45,7 @@ int main(int argc, char **argv)
     LPVOID lpLoadLibrary = (LPVOID) GetProcAddress(GetModuleHandle("kernel32.dll"), "LoadLibraryA");
     cout << "LoadLibrary address = " << (hex) << lpLoadLibrary << (dec) << endl;
     if(CreateRemoteThread(hProcess, nullptr, 0, (LPTHREAD_START_ROUTINE) lpLoadLibrary, lpRemoteMem, 0, nullptr) == nullptr) errorAndOut(GetLastError(), "CreateRemoteThread");
+    cout << "CreateRemoteThread successful." << endl;
     delete szDLLName;
     CloseHandle(hProcess);
     return 0;
@@ -94,7 +98,6 @@ DWORD findProcess(string sName)
                     transform(pidName.begin(), pidName.end(), pidName.begin(), ::tolower);
                     if(pidName.find(sName) != string::npos) dwOut = pdwProcess[i];
                 }
-                else errorAndOut(GetLastError(), "GetModuleFileNameEx");
                 delete szName;
                 CloseHandle(hProcess);
             }
