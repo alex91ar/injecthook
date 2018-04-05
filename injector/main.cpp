@@ -16,36 +16,69 @@ int main(int argc, char **argv)
     cout << "Injector" << endl;
     cout << "--------" << endl;
     if(argc != 3) usage(argv[0]);
+    //Check if the target DLL is accessible.
     HANDLE hDLL = CreateFile(argv[2], 0, 0, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if(hDLL == INVALID_HANDLE_VALUE) errorAndOut(GetLastError(), "CreateFile opening dll");
+    if(hDLL == INVALID_HANDLE_VALUE)
+    {
+        errorAndOut(GetLastError(), "CreateFile opening dll"); //Exit
+    }
     CloseHandle(hDLL);
-
+    //Load PID or find PID that corresponds to the argument passed as executable name. Partial matches are allowed.
     stringstream pidOrName(argv[1]);
-
     DWORD dwPID = 0;
     pidOrName >> dwPID;
-    if(!dwPID) dwPID = findProcess(argv[1]);
-    if(!dwPID) errorAndOut(0, "Process ID invalid or process name not found.");
+    if(!dwPID)
+    {
+        dwPID = findProcess(argv[1]);
+    }
+    if(!dwPID)
+    {
+        errorAndOut(0, "Process ID invalid or process name not found.");
+    }
+    //Now start injecting. Try to open the process and get a Handle to it.
     cout << "Injecting on " << dwPID << "..." << endl;
     HANDLE hProcess = OpenProcess(PROCESS_CREATE_THREAD | PROCESS_QUERY_INFORMATION | PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_VM_READ, false, dwPID);
-    if(hProcess == nullptr) errorAndOut(GetLastError(), "OpenProcess");
-
+    if(hProcess == nullptr)
+    {
+        errorAndOut(GetLastError(), "OpenProcess");
+    }
     cout << "Process " << dwPID << " opened." << endl;
-    if(!checkArch(hProcess)) errorAndOut(0, "Incompatible architecture. Compile the proper version and try again.");
+    //Check if the architecture matches. Injecting cross-architecture can be done, but it's pointless and complicated.
+    if(!checkArch(hProcess))
+    {
+        errorAndOut(0, "Incompatible architecture. Compile the proper version and try again.");
+    }
+    //Allocate memory on the target process.
     cout << "Allocating memory..." << endl;
     LPVOID lpRemoteMem = VirtualAllocEx(hProcess, nullptr, 1024, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE);
     if(lpRemoteMem == nullptr) errorAndOut(GetLastError(), "VirtualAllocEx");
     cout << "Remote process memory = " << (hex) << lpRemoteMem << (dec) << endl;
+    //Now Get the DLL path and write it to the target process on the allocated memory.
     char *szDLLName = new char[1024];
     ZeroMemory(szDLLName, 1024);
     DWORD dwSize = strlen(argv[2]);
-    if(dwSize > 1023) strncpy(szDLLName, argv[2], 1023);
-    else strcpy(szDLLName, argv[2]);
-    if(WriteProcessMemory(hProcess, lpRemoteMem, szDLLName, 1024, nullptr) == 0) errorAndOut(GetLastError(), "WriteProcessMemory");
+    if(dwSize > 1023)
+    {
+        strncpy(szDLLName, argv[2], 1023);
+    }
+    else
+    {
+        strcpy(szDLLName, argv[2]);
+    }
+    if(WriteProcessMemory(hProcess, lpRemoteMem, szDLLName, 1024, nullptr) == 0)
+    {
+        errorAndOut(GetLastError(), "WriteProcessMemory");
+    }
+    //Get the address for LoadLibraryA.
     LPVOID lpLoadLibrary = (LPVOID) GetProcAddress(GetModuleHandle("kernel32.dll"), "LoadLibraryA");
     cout << "LoadLibrary address = " << (hex) << lpLoadLibrary << (dec) << endl;
-    if(CreateRemoteThread(hProcess, nullptr, 0, (LPTHREAD_START_ROUTINE) lpLoadLibrary, lpRemoteMem, 0, nullptr) == nullptr) errorAndOut(GetLastError(), "CreateRemoteThread");
+    //Call CreateRemoteThread to call LoadLibraryA on the target process with the DLL path as a parameter.
+    if(CreateRemoteThread(hProcess, nullptr, 0, (LPTHREAD_START_ROUTINE) lpLoadLibrary, lpRemoteMem, 0, nullptr) == nullptr)
+    {
+        errorAndOut(GetLastError(), "CreateRemoteThread");
+    }
     cout << "CreateRemoteThread successful." << endl;
+    //Clean out, close handles and exit.
     delete szDLLName;
     CloseHandle(hProcess);
     return 0;
